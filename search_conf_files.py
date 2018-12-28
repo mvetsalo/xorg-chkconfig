@@ -6,7 +6,24 @@ import socket
 
 import pprint
 
+
+hostname = socket.gethostname()
+CFG_SEARCH_PATH = ['/etc/X11/xorg.conf', \
+                   '/etc/xorg.conf', \
+                   '/usr/etc/X11/xorg.conf.' + hostname, \
+                   '/usr/etc/X11/xorg.conf', \
+                   '/usr/lib/X11/xorg.conf.' + hostname, \
+                   '/usr/lib/X11/xorg.conf', \
+                   '/etc/X11/xorg.conf.d/', \
+                   '/usr/etc/X11/xorg.conf.d/', \
+                   '/usr/share/X11/xorg.conf.d/']
+
+
 def accessible(fs_path): 
+    ''' Check file/directory accessibility. For file check read bit presense.
+        For directory read and execute bits presense.
+
+    '''
     if os.path.isfile(fs_path):
         return os.access(fs_path, os.R_OK)
     elif os.path.isdir(fs_path):
@@ -14,9 +31,8 @@ def accessible(fs_path):
     else:
         return False
 
-
 def do_env_xorgconfig(xconfig_path):
-    ''' Adopt XORGCONFIG environment variable '''
+    ''' Adopt XORGCONFIG environment variable to XOrg config search path. '''
     env_search_path = list()
 
     if xconfig_path:
@@ -39,9 +55,8 @@ def do_env_xorgconfig(xconfig_path):
 
     return env_search_path
 
-
 def expand_conf_dir(config_dir):
-    ''' Search all *.conf files in directory config_dir '''
+    ''' Search all *.conf files in directory config_dir. '''
     cf_list = list()
 
     if accessible(config_dir):
@@ -53,32 +68,26 @@ def expand_conf_dir(config_dir):
 
     return cf_list
 
+def build_cf_list():
+    ''' Build list of XOrg config files present in system. '''
+    cfg_list = CFG_SEARCH_PATH[:]
 
-hostname = socket.gethostname()
-cfg_list = ['/etc/X11/xorg.conf', \
-            '/etc/xorg.conf', \
-            '/usr/etc/X11/xorg.conf.' + hostname, \
-            '/usr/etc/X11/xorg.conf', \
-            '/usr/lib/X11/xorg.conf.' + hostname, \
-            '/usr/lib/X11/xorg.conf', \
-            '/etc/X11/xorg.conf.d/', \
-            '/usr/etc/X11/xorg.conf.d/', \
-            '/usr/share/X11/xorg.conf.d/']
+    if 'XORGCONFIG' in os.environ: 
+        cfg_list = do_env_xorgconfig(os.environ['XORGCONFIG']) + cfg_list
 
-if 'XORGCONFIG' in os.environ: 
-    cfg_list = do_env_xorgconfig(os.environ['XORGCONFIG']) + cfg_list
+    i = 0
+    while i < len(cfg_list):
+        if os.path.isdir(cfg_list[i]):
+            cfg_list = cfg_list[:i] + expand_conf_dir(cfg_list[i]) + cfg_list[i+1:]
 
-pprint.pprint(cfg_list)
+        # Check file accessibility and duplicates
+        if not accessible(cfg_list[i]) or (cfg_list[i] in cfg_list[:i]):
+            del cfg_list[i]
+        else:
+            i += 1
 
-i = 0
-while i < len(cfg_list):
-    if os.path.isdir(cfg_list[i]):
-        cfg_list = cfg_list[:i] + expand_conf_dir(cfg_list[i]) + cfg_list[i+1:]
+    return cfg_list
 
-    # Check file accessibility and duplicates
-    if not accessible(cfg_list[i]) or (cfg_list[i] in cfg_list[:i]):
-        del cfg_list[i]
-    else:
-        i += 1
 
-pprint.pprint(cfg_list)
+if __name__ == '__main__':
+    pprint.pprint(build_cf_list())
